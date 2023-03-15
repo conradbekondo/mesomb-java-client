@@ -1,22 +1,52 @@
 plugins {
     id 'java-library'
+    id 'maven-publish'
 }
 
 group 'com.hachther.mesomb'
 version '1.0.0'
 
+
 repositories {
     mavenCentral()
 }
 
+ext {
+    def lombok_version = "1.18.26"
+}
+
 dependencies {
-    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
-    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.1'
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.2'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.9.2'
 
     implementation group: 'com.squareup.okhttp3', name: 'okhttp', version: '4.10.0'
     implementation group: 'com.googlecode.json-simple', name: 'json-simple', version: '1.1.1'
+    annotationProcessor group: 'org.projectlombok', name: 'lombok', version: '1.18.26'
+    compileOnly group: 'org.projectlombok', name: 'lombok', version: '1.18.26'
+    implementation group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: '2.9.8'
+    implementation group: 'com.fasterxml.jackson.datatype', name: 'jackson-datatype-jdk8', version: '2.13.3'
+    implementation group: 'com.fasterxml.jackson.datatype', name: 'jackson-datatype-jsr310', version: '2.13.3'
 }
 
 test {
     useJUnitPlatform()
+}
+
+publishing {
+    publications {
+        customLibrary(MavenPublication) {
+            from components.java
+        }
+    }
+
+    repositories {
+        maven {
+            name = 'sampleRepo'
+            url = layout.buildDirectory.dir("repo")
+        }
+    }
+}
+
+repositories {
+    mavenCentral()
 }

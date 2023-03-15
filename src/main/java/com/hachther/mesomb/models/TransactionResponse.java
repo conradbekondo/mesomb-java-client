@@ -1,55 +1,27 @@
 package com.hachther.mesomb.models;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.extern.jackson.Jacksonized;
 import org.json.simple.JSONObject;
 
 import java.util.Map;
 import java.util.Objects;
 
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Jacksonized
+@Builder
 public class TransactionResponse {
-    private final boolean success;
-    private final String message;
-    private final String redirect;
-    private final Map<String, Object> data;
-    private final String reference;
-    private final String status;
-
-    public TransactionResponse(JSONObject data) {
-        this.success = (boolean) data.get("success");
-        this.message = (String) data.get("message");
-        this.redirect = (String) data.get("redirect");
-        this.data = (Map<String, Object>) data.get("data");
-        this.reference = (String) data.get("reference");
-        this.status = (String) data.get("status");
-    }
-
-    public boolean isSuccess() {
-        return success;
-    }
-
-    public String getMessage() {
-        return message;
-    }
-
-    public String getRedirect() {
-        return redirect;
-    }
-
-    public Map<String, Object> getData() {
-        return data;
-    }
-
-    public String getReference() {
-        return reference;
-    }
-
-    public String getStatus() {
-        return status;
-    }
-
-    public boolean isOperationSuccess()
-    {
-        return this.success;
-    }
+    private boolean success;
+    private String message;
+    private String redirect;
+    private TransactionModel transaction;
+    private String reference;
+    private String status;
 
     public boolean isTransactionSuccess() {
         return this.success && Objects.equals(this.status, "SUCCESS");

@@ -1,5 +1,7 @@
 package com.hachther.mesomb.operations;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.hachther.mesomb.Settings;
 import com.hachther.mesomb.Signature;
 import com.hachther.mesomb.exceptions.InvalidClientRequestException;
@@ -7,6 +9,7 @@ import com.hachther.mesomb.exceptions.PermissionDeniedException;
 import com.hachther.mesomb.exceptions.ServerException;
 import com.hachther.mesomb.exceptions.ServiceNotFoundException;
 import com.hachther.mesomb.models.Application;
+import com.hachther.mesomb.models.TransactionModel;
 import com.hachther.mesomb.models.TransactionResponse;
 import okhttp3.*;
 import org.json.simple.JSONArray;
@@ -24,7 +27,7 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Containing all operations provided by MeSomb Payment Service.
- *
+ * <p>
  * [Check the documentation here](https://mesomb.hachther.com/en/api/v1.1/schema/)
  */
 public class PaymentOperation {
@@ -34,11 +37,14 @@ public class PaymentOperation {
     private final String applicationKey;
     private final String accessKey;
     private final String secretKey;
+    private final ObjectMapper objectMapper;
 
     public PaymentOperation(String applicationKey, String accessKey, String secretKey) {
         this.applicationKey = applicationKey;
         this.accessKey = accessKey;
         this.secretKey = secretKey;
+        this.objectMapper = new ObjectMapper();
+        objectMapper.registerModule(new JavaTimeModule());
     }
 
     private String buildUrl(String endpoint) {
@@ -178,12 +184,83 @@ public class PaymentOperation {
             if (response.code() >= 400) {
                 this.processClientException(response);
             }
-            JSONParser parser = new JSONParser();
-            try {
-                return new TransactionResponse((JSONObject) parser.parse(response.body().string()));
-            } catch (ParseException e) {
-                throw new ServerException("Issue to parse transaction response", "parsing-issue");
+
+            var json = Objects.requireNonNull(response.body()).string();
+            return objectMapper.readValue(json, TransactionResponse.class);
+        }
+    }
+
+    public TransactionResponse makeCollect(
+            float amount,
+            String service,
+            String payer,
+            Date date,
+            String nonce,
+            String country,
+            String currency,
+            boolean feesIncluded,
+            String mode,
+            boolean conversion,
+            String transactionId,
+            Map<String, String> location,
+            Map<String, String> customer,
+            Map<String, String> product,
+            Map<String, Object> extra) throws IOException, NoSuchAlgorithmException, InvalidKeyException, ServerException, ServiceNotFoundException, PermissionDeniedException, InvalidClientRequestException {
+        String endpoint = "payment/collect/";
+        String url = this.buildUrl(endpoint);
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("amount", amount);
+        body.put("service", service);
+        body.put("payer", payer);
+        body.put("country", country);
+        body.put("currency", currency);
+        body.put("fees", feesIncluded);
+        body.put("conversion", conversion);
+
+        if (location != null) {
+            body.put("location", location);
+        }
+
+        if (customer != null) {
+            body.put("customer", customer);
+        }
+
+        if (product != null) {
+            body.put("product", product);
+        }
+
+        if (extra != null) {
+            for (String key : extra.keySet()) {
+                body.put(key, extra.get(key));
             }
+        }
+
+        String authorization = this.getAuthorization("POST", endpoint, date, nonce, new TreeMap<>() {{
+            put("content-type", JSON.toString());
+        }}, body);
+
+        OkHttpClient client = new OkHttpClient.Builder().readTimeout(30, TimeUnit.SECONDS).build();
+
+        Request request = new Request.Builder()
+                .url(url)
+                .post(RequestBody.create(JSONObject.toJSONString(body), JSON))
+//                .addHeader("Content-Type", "application/json")
+                .addHeader("x-mesomb-date", String.valueOf(date.getTime() / 1000))
+                .addHeader("x-mesomb-nonce", nonce)
+                .addHeader("Authorization", authorization)
+                .addHeader("X-MeSomb-Application", this.applicationKey)
+                .addHeader("X-MeSomb-OperationMode", mode)
+                .addHeader("X-MeSomb-TrxID", transactionId)
+                .build();
+
+        try (Response response = client.newCall(request).execute()) {
+            if (response.code() >= 400) {
+                this.processClientException(response);
+            }
+
+            var json = Objects.requireNonNull(response.body()).string();
+            return objectMapper.readValue(json, TransactionResponse.class);
         }
     }
 
@@ -198,14 +275,14 @@ public class PaymentOperation {
     /**
      * Method to make deposit in a receiver mobile account.
      *
-     * @param amount the amount of the transaction
-     * @param service service code (MTN, ORANGE, AIRTEL, ...)
+     * @param amount   the amount of the transaction
+     * @param service  service code (MTN, ORANGE, AIRTEL, ...)
      * @param receiver receiver account (in the local phone number)
-     * @param date date of the request
-     * @param nonce Unique key generated for each transaction
-     * @param country country code, 'CM' by default
+     * @param date     date of the request
+     * @param nonce    Unique key generated for each transaction
+     * @param country  country code, 'CM' by default
      * @param currency currency of the transaction (XAF, XOF, ...) XAF by default
-     * @param extra extra parameters to send in the body check the API documentation
+     * @param extra    extra parameters to send in the body check the API documentation
      * @return TransactionResponse
      * @throws IOException
      * @throws NoSuchAlgorithmException
@@ -252,12 +329,8 @@ public class PaymentOperation {
             if (response.code() >= 400) {
                 this.processClientException(response);
             }
-            JSONParser parser = new JSONParser();
-            try {
-                return new TransactionResponse((JSONObject) parser.parse(response.body().string()));
-            } catch (ParseException e) {
-                throw new ServerException("Issue to parse transaction response", "parsing-issue");
-            }
+            var json = Objects.requireNonNull(response.body()).string();
+            return objectMapper.readValue(json, TransactionResponse.class);
         }
     }
 
@@ -269,10 +342,10 @@ public class PaymentOperation {
     /**
      * Update security parameters of your service on MeSomb
      *
-     * @param field which security field you want to update (check API documentation)
+     * @param field  which security field you want to update (check API documentation)
      * @param action action SET or UNSET
-     * @param value value of the field
-     * @param date date of the request
+     * @param value  value of the field
+     * @param date   date of the request
      * @return Application
      * @throws IOException
      * @throws NoSuchAlgorithmException
@@ -422,4 +495,30 @@ public class PaymentOperation {
     public JSONArray getTransactions(String[] ids) throws ServerException, ServiceNotFoundException, PermissionDeniedException, IOException, NoSuchAlgorithmException, InvalidClientRequestException, InvalidKeyException {
         return this.getTransactions(ids, null);
     }
+
+    public TransactionModel checkTransactionStatus(String[] ids) throws IOException, NoSuchAlgorithmException, InvalidKeyException, ServerException, ServiceNotFoundException, PermissionDeniedException, InvalidClientRequestException {
+        var endpoint = "payment/transactions/check/?ids=" + String.join(",", ids);
+        var url = buildUrl(endpoint);
+        var date = new Date();
+        var authorization = getAuthorization("GET", endpoint, date, "");
+        var client = new OkHttpClient();
+        var request = new Request.Builder()
+                .url(url)
+                .get()
+                .addHeader("X-MeSomb-Date", String.valueOf(date.getTime() / 1000))
+                .addHeader("X-MeSomb-Nonce", "")
+                .addHeader("Authorization", authorization)
+                .addHeader("X-MeSomb-Application", applicationKey)
+                .build();
+        try (var response = client.newCall(request).execute()) {
+            if (response.code() >= 400) {
+                processClientException(response);
+            }
+            var json = Objects.requireNonNull(response.body()).string();
+            var parsedResult = objectMapper.readValue(json, TransactionModel[].class);
+            return parsedResult[0];
+        }
+    }
+
+
 }
